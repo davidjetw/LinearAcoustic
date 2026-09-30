@@ -1,0 +1,6 @@
+ota_secrets.h
+build/
+*.bin
+*.elf
+*.map
+__pycache__/
