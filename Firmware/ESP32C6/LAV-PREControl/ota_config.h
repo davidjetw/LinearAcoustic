@@ -1,7 +1,7 @@
 #pragma once
 
 // Release identity: change only when publishing a new firmware release.
-#define AUDIO_FW_VERSION "26.09.30+2"
+#define AUDIO_FW_VERSION "26.09.30+3"
 #define AUDIO_OTA_PRODUCT "linear-acoustic-lav60ii"
 #define AUDIO_OTA_BOARD "esp32c6"
 #define AUDIO_OTA_MANIFEST_URL "https://raw.githubusercontent.com/davidjetw/LinearAcoustic/main/OTA/ESP32C6/version.json"

@@ -173,10 +173,10 @@ void refreshWebActivity() {
 // ==========================================
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
-<html>
+<html lang="zh-Hant">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Linear Acoustic</title>
   <style>
     body { 
@@ -190,13 +190,13 @@ const char index_html[] PROGMEM = R"rawliteral(
       user-select: none;
     }
     
-    /* 縮減頂部留白，加大內容顯示區 */
     .container { 
       max-width: 500px; margin: 0 auto; background: #121214; 
       padding: calc(18px + env(safe-area-inset-top)) 20px 24px; 
       min-height: 100vh; box-sizing: border-box; 
       border-radius: 36px; 
       overflow: hidden;
+      position: relative; /* 確保內容相對定位 */
     }
 
     @media (min-width: 600px) {
@@ -207,8 +207,8 @@ const char index_html[] PROGMEM = R"rawliteral(
       }
     }
     
-    /* 縮小標題與下方狀態的距離 */
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; }
+    /* 頂部 Header：左標題 + 右大電源鍵 */
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0; padding-top: 8px; }
     h2 { margin: 0; font-size: 25px; letter-spacing: 0.8px; font-weight: 600; }
     
     .btn-pwr { 
@@ -225,10 +225,15 @@ const char index_html[] PROGMEM = R"rawliteral(
     }
     .btn-pwr:active { transform: scale(0.92); }
 
+    .power-status-row {
+      display: flex; align-items: center; gap: 15px;
+      margin-top: 14px; margin-bottom: 24px;
+    }
+
     #st {
       display: inline-flex; align-items: center; gap: 9px;
       font-size: 16px; font-weight: bold; letter-spacing: 0;
-      margin-top: 7px; margin-bottom: 23px; color: #03dac6;
+      margin: 0; color: #03dac6;
     }
     #st::before {
       content: ''; width: 7px; height: 7px; border-radius: 50%;
@@ -237,217 +242,140 @@ const char index_html[] PROGMEM = R"rawliteral(
     }
     #st.motor-mode::before { display: none; }
 
-    /* 資訊藥丸列，改為置中並準備放到最下方 */
-    .info-pill-bar { display: flex; gap: 8px; margin-top: 2px; margin-bottom: 22px; width: 100%; }
+    /* 底部三膠囊資訊列 */
+    .bottom-bar { 
+      display: flex; align-items: center; gap: 10px; 
+      margin-top: 6px; margin-bottom: 8px; width: 100%; 
+    }
+    .info-pill-bar { display: flex; gap: 8px; flex: 1; margin: 0; min-width: 0; }
     .info-pill { 
-      flex: 1;
-      min-width: 0;
-      background: rgba(255,255,255,0.045); 
-      border: 1px solid rgba(255,255,255,0.075);
-      padding: 7px 4px; 
-      border-radius: 18px; 
-      font-size: 12px; 
-      color: #888; 
-      display: flex; 
-      align-items: center; 
-      justify-content: center;
-      gap: 4px; 
-      white-space: nowrap;
+      flex: 1; min-width: 0; background: rgba(255,255,255,0.045); border: 1px solid rgba(255,255,255,0.075);
+      padding: 7px 4px; border-radius: 18px; font-size: 12px; color: #888; 
+      display: flex; align-items: center; justify-content: center; gap: 4px; white-space: nowrap;
     }
-    .info-pill:nth-child(2) {
-      flex: 0 0 auto;
-      padding: 7px 9px;
-    }
-    .info-pill .val { 
-      color: #f2f2f2; 
-      font-weight: 500; 
-      overflow: hidden; 
-      text-overflow: ellipsis; 
-    }
+    .info-pill:nth-child(2) { flex: 0 0 auto; padding: 7px 9px; }
+    .info-pill .val { color: #f2f2f2; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 
-    /* 恢復正常大小寫，三行間距完全統一 */
+    /* --- iOS HomeKit 風格右下角設定按鈕 --- */
+    .ios-settings-wrapper {
+      display: flex; justify-content: flex-end; margin-top: 16px;
+    }
+    .ios-settings-btn {
+      width: 48px; height: 48px; border-radius: 50%; padding: 0;
+      background: rgba(255, 255, 255, 0.12);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: all 0.2s;
+      -webkit-tap-highlight-color: transparent; outline: none;
+    }
+    .ios-settings-btn:active {
+      transform: scale(0.85); background: rgba(255, 255, 255, 0.2);
+    }
+    .ios-settings-btn svg {
+      width: 22px; height: 22px; fill: none; stroke: currentColor;
+      transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    }
+    .ios-settings-btn:active svg { transform: rotate(45deg); }
+
     h3 { font-size: 14px; color: #8d8d93; margin: 0 0 10px 5px; font-weight: 500; letter-spacing: 0.2px; }
 
-    /* 1. 外軌道容器：三行完全等高 58px、四周留白 5px、圓角 33px */
     .segmented-control {
-      display: flex;
-      align-items: center;
-      height: 58px;
-      padding: 5px;
-      box-sizing: border-box;
-      background: #09090b;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      border-radius: 33px;
-      margin-bottom: 21px;
+      display: flex; align-items: center; height: 58px; padding: 5px; box-sizing: border-box;
+      background: #09090b; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 33px; margin-bottom: 21px;
     }
     #volGroup { gap: 6px; }
 
-    /* 2. 內部按鍵基底：統一高度 48px、圓角 28px、清空 padding */
     .segmented-control button {
-      position: relative;
-      overflow: hidden;
-      flex: 1;
-      height: 48px;
-      padding: 0;
-      margin: 0;
-      box-sizing: border-box;
-      background: transparent;
-      border: none;
-      border-radius: 28px;
-      font-size: 16px;
-      color: #888;
-      font-weight: 500;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.1s cubic-bezier(0.25, 1, 0.5, 1);
+      position: relative; overflow: hidden; flex: 1; height: 48px; padding: 0; margin: 0;
+      box-sizing: border-box; background: transparent; border: none; border-radius: 28px;
+      font-size: 16px; color: #888; font-weight: 500; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; transition: all 0.1s cubic-bezier(0.25, 1, 0.5, 1);
+      -webkit-tap-highlight-color: transparent; outline: none;
     }
 
-    /* 3. 黃色按鍵 Active 狀態 (訊源 Source / 亮度 Brightness) */
     .segmented-control button.active {
       background: linear-gradient(180deg, #f5d431 0%, #efc21e 50%, #e2ab0f 100%);
-      color: #000;
-      font-weight: 700;
-      border: none;
-      box-shadow: 
-        inset 0 1px 0 rgba(255, 255, 255, 0.75),
-        inset 0 -1.5px 0 rgba(255, 245, 170, 0.6),
-        0 4px 10px rgba(0, 0, 0, 0.35);
+      color: #000; font-weight: 700; border: none;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -1.5px 0 rgba(255, 245, 170, 0.6), 0 4px 10px rgba(0, 0, 0, 0.35);
     }
     .segmented-control button.active::after {
-      content: '';
-      position: absolute;
-      top: 1px;
-      left: 8%;
-      right: 8%;
-      height: 44%;
-      border-radius: 50px;
-      background: linear-gradient(
-        180deg, 
-        rgba(255, 255, 255, 0.42) 0%, 
-        rgba(255, 255, 255, 0.08) 75%, 
-        rgba(255, 255, 255, 0) 100%
-      );
-      pointer-events: none;
-    }
-
-    /* 4. 音量加減鍵 (+ / -) 預設狀態 */
-    .segmented-control .btn-vol {
-      flex: 1;
-      font-size: 32px;
-      font-weight: 300;
-      line-height: 1;
-      color: #e0e0e0;
-      background: linear-gradient(135deg, #222226 0%, #09090b 100%);
-      border: none !important; /* 徹底移除實體邊框，解決跳動與溢出 */
-      box-shadow: 
-        inset 0 0 0 1px rgba(0, 0, 0, 0.8), /* 用內陰影畫出深色極細邊框 */
-        inset 1px 2px 2px rgba(255, 255, 255, 0.12),
-        inset -1px -2px 5px rgba(0, 0, 0, 0.8),
-        0px 4px 8px rgba(0, 0, 0, 0.4);
-      margin: 0; 
-      border-radius: 28px; /* 統一改為 28px，與 Source 按鈕弧度與高度完美一致 */
-    }
-    
-    /* 音量加減鍵 Active (按下狀態) */
-    .segmented-control button.btn-vol:active,
-    .segmented-control button.btn-vol.active {
-      background: linear-gradient(180deg, #f5d431 0%, #efc21e 50%, #e2ab0f 100%) !important;
-      color: #000 !important;
-      font-weight: 700;
-      border: none !important; /* 徹底移除邊框 */
-      box-shadow: 
-        inset 0 1px 0 rgba(255, 255, 255, 0.75),
-        inset 0 -1.5px 0 rgba(255, 245, 170, 0.6),
-        0 0 14px rgba(239, 194, 30, 0.45),
-        0 4px 10px rgba(0, 0, 0, 0.35) !important;
-    }
-    
-    .segmented-control button.btn-vol:active::after,
-    .segmented-control button.btn-vol.active::after {
       content: ''; position: absolute; top: 1px; left: 8%; right: 8%; height: 44%; border-radius: 50px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.08) 75%, transparent 100%);
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.08) 75%, rgba(255, 255, 255, 0) 100%);
       pointer-events: none;
     }
 
-    /* 5. 靜音鍵 (MUTE) 預設狀態 */
-    .segmented-control .btn-mute {
-      flex: 0 0 64px;
-      padding: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #777;
+    .segmented-control .btn-vol {
+      flex: 1; font-size: 32px; font-weight: 300; line-height: 1; color: #e0e0e0;
       background: linear-gradient(135deg, #222226 0%, #09090b 100%);
-      border: none !important; /* 徹底移除實體邊框 */
-      box-shadow: 
-        inset 0 0 0 1px rgba(0, 0, 0, 0.8), /* 用內陰影畫出邊框 */
-        inset 1px 2px 2px rgba(255, 255, 255, 0.12), 
-        inset -1px -2px 5px rgba(0, 0, 0, 0.8),
-        0px 4px 8px rgba(0, 0, 0, 0.4);
-      margin: 0; 
-      border-radius: 28px; /* 統一改為 28px */
+      border: none !important; margin: 0; border-radius: 28px;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.8), inset 1px 2px 2px rgba(255, 255, 255, 0.12), inset -1px -2px 5px rgba(0, 0, 0, 0.8), 0px 4px 8px rgba(0, 0, 0, 0.4);
     }
     
-    .segmented-control button.btn-mute svg {
-      width: 22px;
-      height: 22px;
-      fill: currentColor;
+    .segmented-control button.btn-vol:active, .segmented-control button.btn-vol.active {
+      background: linear-gradient(180deg, #f5d431 0%, #efc21e 50%, #e2ab0f 100%) !important;
+      color: #000 !important; font-weight: 700; border: none !important;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -1.5px 0 rgba(255, 245, 170, 0.6), 0 0 14px rgba(239, 194, 30, 0.45), 0 4px 10px rgba(0, 0, 0, 0.35) !important;
     }
+    .segmented-control button.btn-vol:active::after, .segmented-control button.btn-vol.active::after {
+      content: ''; position: absolute; top: 1px; left: 8%; right: 8%; height: 44%; border-radius: 50px;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0.08) 75%, transparent 100%); pointer-events: none;
+    }
+
+    .segmented-control .btn-mute {
+      flex: 0 0 64px; padding: 0; display: flex; align-items: center; justify-content: center; color: #777;
+      background: linear-gradient(135deg, #222226 0%, #09090b 100%); border: none !important;
+      box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.8), inset 1px 2px 2px rgba(255, 255, 255, 0.12), inset -1px -2px 5px rgba(0, 0, 0, 0.8), 0px 4px 8px rgba(0, 0, 0, 0.4);
+      margin: 0; border-radius: 28px;
+    }
+    .segmented-control button.btn-mute svg { width: 22px; height: 22px; fill: currentColor; }
     
-    /* 靜音鍵 Active (按下狀態) */
     .segmented-control button.btn-mute.active {
       background: linear-gradient(180deg, #cb3947 0%, #b52533 50%, #9e1724 100%) !important;
-      color: #ffffff !important;
-      border: none !important; /* 徹底移除邊框 */
+      color: #ffffff !important; border: none !important;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.65), inset 0 -1.5px 0 rgba(255,180,180,0.45), 0 4px 10px rgba(0,0,0,0.4) !important;
     }
-    
     .segmented-control button.btn-mute.active::after {
       content: ''; position: absolute; top: 1px; left: 8%; right: 8%; height: 44%; border-radius: 50px;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.05) 80%, transparent 100%);
-      pointer-events: none;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.4) 0%, rgba(255, 255, 255, 0.05) 80%, transparent 100%); pointer-events: none;
     }
     
-    /* 馬達運轉時的微光動態 (套用在 Mute 圖標上) */
     @keyframes motorPulse {
       0% { filter: drop-shadow(0 0 2px #f5d431); color: #f5d431; }
       50% { filter: drop-shadow(0 0 12px #f5d431); color: #fff; }
       100% { filter: drop-shadow(0 0 2px #f5d431); color: #f5d431; }
     }
-    .motor-running {
-      animation: motorPulse 0.6s infinite !important;
-    }
+    .motor-running svg { animation: motorPulse 0.6s infinite; }
+    
+    .main-controls { transition: opacity 0.22s ease, filter 0.22s ease; }
+    .main-controls.standby { opacity: 0.48; filter: saturate(0.72); }
 
-    /* V2：待機時保留控制位置，但降低操作區視覺權重 */
-    .main-controls {
-      transition: opacity 0.22s ease, filter 0.22s ease;
-    }
-    .main-controls.standby {
-      opacity: 0.48;
-      filter: saturate(0.72);
-    }
-
-    /* 設定頁面獨立按鈕 */
     .btn-glass {
-      font-family: inherit; font-weight: 500; color: white; cursor: pointer; width: 100%; box-sizing: border-box; margin-bottom: 12px;
-      height: 42px; padding: 0 16px; font-size: 14px; border-radius: 21px; transition: all 0.2s;
+      font-family: inherit; font-weight: 500; cursor: pointer; width: 100%; box-sizing: border-box; margin-bottom: 12px;
+      height: 46px; padding: 0 16px; font-size: 15px; border-radius: 23px; transition: all 0.2s;
       display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(180deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 100%); border: none;
-      box-shadow: inset 0 1px 1px rgba(255,255,255,0.25), 0 4px 10px rgba(0,0,0,0.3); backdrop-filter: blur(10px);
+      border: none; outline: none; text-decoration: none; -webkit-tap-highlight-color: transparent;
     }
-    .btn-glass:active { transform: scale(0.97); background: rgba(255,255,255,0.04); box-shadow: inset 0 2px 8px rgba(0,0,0,0.6); }
-    .setup-btn { margin-top: 1px; }
-    .btn-red { background: linear-gradient(180deg, rgba(200,50,70,0.6) 0%, rgba(200,50,70,0.2) 100%); box-shadow: inset 0 1px 1px rgba(255,150,150,0.4), 0 4px 10px rgba(0,0,0,0.3); }
-    .btn-blue { background: linear-gradient(180deg, rgba(10,132,255,0.6) 0%, rgba(10,132,255,0.2) 100%); box-shadow: inset 0 1px 1px rgba(150,200,255,0.4), 0 4px 10px rgba(0,0,0,0.3); }
-    .btn-cyan { background: linear-gradient(180deg, rgba(3,218,198,0.6) 0%, rgba(3,218,198,0.2) 100%); box-shadow: inset 0 1px 1px rgba(150,255,250,0.5), 0 4px 10px rgba(0,0,0,0.3); color: black; font-weight: bold; }
+    .btn-primary {
+      background: linear-gradient(180deg, #0a84ff 0%, #006ee6 100%);
+      box-shadow: inset 0 1px 1px rgba(255,255,255,0.3), 0 4px 10px rgba(0,110,230,0.3);
+      color: white;
+    }
+    .btn-primary:active { transform: scale(0.97); filter: brightness(0.9); }
+    
+    .btn-secondary {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: white;
+    }
+    .btn-secondary:active { background: rgba(255,255,255,0.12); transform: scale(0.97); }
 
-    /* 設定小標題 */
     .setting-label { font-size: 13px; color: #888; margin: 0 0 6px 12px; letter-spacing: 1px; }
 
-    .input-wrapper { position: relative; margin: 0 0 8px 0; display: block; }
-    input, select { 
+    .input-wrapper { position: relative; margin: 0 0 12px 0; display: block; }
+    input { 
       font-family: inherit; width: 100%; padding: 0 44px; margin: 0; border-radius: 23px; 
       border: 1px solid #2a2a2a; background: #0c0c0e; color: white; font-size: 15px; 
       box-sizing: border-box; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8); transition: 0.2s; 
@@ -460,195 +388,342 @@ const char index_html[] PROGMEM = R"rawliteral(
     .toggle-password:hover { color: #fff; }
     .toggle-password svg { width: 20px; height: 20px; fill: currentColor; }
 
-    details { background: #1a1a1c; border-radius: 18px; margin-bottom: 12px; overflow: hidden; border: 1px solid #2a2a2c; }
-    summary { padding: 14px 16px; font-weight: 500; color: #ccc; cursor: pointer; outline: none; list-style: none; display: flex; justify-content: space-between; align-items: center; }
-    summary::-webkit-details-marker { display: none; }
-    summary::after { content: '▼'; font-size: 12px; transition: transform 0.2s; color: #777; }
-    details[open] summary { border-bottom: 1px solid #2a2a2c; background: #202022; }
-    details[open] summary::after { transform: rotate(180deg); }
-    .setup-content { padding: 10px; }
+    .fw-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; padding-top: 8px; position: relative;
+    }
+    .fw-header h2 { font-size: 18px; margin: 0; font-weight: 600; letter-spacing: 0.5px; color: #fff; position: absolute; left: 50%; transform: translateX(-50%); }
+    
+    .back-btn {
+      width: 38px; height: 38px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.1);
+      color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; padding: 0;
+      -webkit-tap-highlight-color: transparent; z-index: 10;
+    }
+    .back-btn:active { background: rgba(255,255,255,0.15); transform: scale(0.92); }
 
-    .wifi-list-container { display: none; max-height: 280px; overflow-y: auto; background: #0c0c0e; border-radius: 16px; margin-bottom: 12px; padding: 0px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8); border: 1px solid #222; }
-    .wifi-item { display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; border-bottom: 1px solid #161618; cursor: pointer; font-size: 14.5px; transition: background 0.1s; }
+    .settings-accordion { background: #141416; border-radius: 20px; border: 1px solid rgba(255,255,255,0.06); margin-bottom: 16px; overflow: hidden; }
+    .settings-accordion summary { padding: 16px 18px; cursor: pointer; list-style: none; background: transparent; -webkit-tap-highlight-color: transparent; }
+    .settings-accordion summary::-webkit-details-marker { display: none; }
+    
+    .summary-content { display: flex; justify-content: space-between; align-items: center; font-size: 15px; font-weight: 500; color: #fff; }
+    .summary-arrow { color: #666; display: flex; align-items: center; transition: transform 0.2s ease; }
+    .summary-arrow svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    
+    .settings-accordion[open] .summary-arrow { transform: rotate(90deg); }
+    .settings-accordion[open] summary { border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
+    .setup-content { padding: 16px; }
+
+    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 4px; font-size: 14px; }
+    .info-row .info-label { color: #fff; }
+    .info-row .info-val { color: #8e8e93; font-family: monospace; }
+    .info-row .info-val.no-mono { font-family: inherit; }
+
+    .settings-list { background: #141416; border-radius: 20px; border: 1px solid rgba(255,255,255,0.06); margin-bottom: 24px; overflow: hidden; display: flex; flex-direction: column; }
+    .settings-item {
+      display: flex; justify-content: space-between; align-items: center; padding: 16px 18px;
+      border-bottom: 1px solid rgba(255,255,255,0.06); text-decoration: none; color: white;
+      cursor: pointer; transition: background 0.2s; -webkit-tap-highlight-color: transparent;
+    }
+    .settings-item:last-child { border-bottom: none; }
+    .settings-item:active { background: rgba(255,255,255,0.05); }
+
+    .settings-item-col { display: flex; flex-direction: column; gap: 4px; }
+    .settings-title { font-size: 15px; font-weight: 500; }
+    .settings-val { font-size: 13px; color: #888; }
+    
+    .settings-chevron { color: #666; display: flex; align-items: center; }
+    .settings-chevron svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .wifi-list-container { display: none; max-height: 280px; overflow-y: auto; background: #0c0c0e; border-radius: 16px; margin-bottom: 16px; padding: 0px; box-shadow: inset 0 2px 8px rgba(0,0,0,0.8); border: 1px solid #222; }
+    .wifi-item { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid #161618; cursor: pointer; font-size: 14.5px; transition: background 0.1s; }
     .wifi-item:last-child { border-bottom: none; }
     .wifi-item:active { background: #202024; color: #bb86fc; }
     .wifi-item-left { display: flex; align-items: center; gap: 7px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .wifi-item-right { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #777; flex-shrink: 0; }
     .wf-sig { font-weight: 600; font-size: 12px; }
+    button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid #03dac6; outline-offset: 3px; }
+    button:disabled { cursor: default; opacity: .45; }
+    .btn-vol { touch-action: none; }
+    .container { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+    .header h2 { min-width: 0; font-size: clamp(20px, 5vw, 25px); }
+    .btn-pwr { flex-shrink: 0; }
+    .info-row { gap: 12px; }
+    .info-val { overflow-wrap: anywhere; text-align: right; min-width: 0; }
+    .wifi-item-left { min-width: 0; flex: 1; }
+    .wifi-ssid { overflow: hidden; text-overflow: ellipsis; }
+    button.wifi-item { width: 100%; color: inherit; background: transparent; text-align: left; border: 0; border-bottom: 1px solid #222; font-family: inherit; }
+    input { font-size: 16px; user-select: text; -webkit-user-select: text; }
+    .toggle-password { border: 0; background: transparent; width: 44px; height: 44px; justify-content: center; right: 5px; }
+    .back-btn { width: 44px; height: 44px; }
+    .settings-item button { font: inherit; }
+    button.settings-item { width: 100%; background: transparent; font: inherit; border: 0; }
+    .form-status { color: #aaa; font-size: 13px; line-height: 1.5; margin: 10px 4px; }
+    @media (prefers-reduced-motion: reduce) { .motor-running svg { animation: none; color: #f5d431; } }
   </style>
 </head>
 <body>
   <div class="container">
     
+    <!-- Main UI View -->
     <div id="view-main">
       <div class="header">
         <h2>Linear Acoustic</h2>
-        <button id="pwr" class="btn-pwr off" onclick="cmd('power')">
-          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <!-- 電源鍵回到最右上角 -->
+        <button id="pwr" aria-label="電源" aria-pressed="false" disabled class="btn-pwr off" onclick="cmd('power')">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line>
           </svg>
         </button>
       </div>
-      <div id="st">Status: Connecting...</div>
+      
+      <!-- 狀態列放在主標題正下方 -->
+      <div class="power-status-row" style="margin-top: 8px; margin-bottom: 20px;">
+        <div id="st" role="status" aria-live="polite">Status: Connecting...</div>
+      </div>
       
       <div class="main-controls">
-      <h3>Volume</h3>
-      <div class="segmented-control" id="volGroup">
-        <button id="volDn" class="btn-vol" onpointerdown="cmd('vol_dn_start')" onpointerup="cmd('motor_stop')" onpointerleave="cmd('motor_stop')">−</button>
-        <button id="mute" class="btn-mute" onclick="cmd('mute')">
-          <svg id="spk-icon" viewBox="0 0 24 24">
-            <!-- 預設喇叭圖示 (將由JS動態切換) -->
-            <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-          </svg>
-        </button>
-        <button id="volUp" class="btn-vol" onpointerdown="cmd('vol_up_start')" onpointerup="cmd('motor_stop')" onpointerleave="cmd('motor_stop')">+</button>
-      </div>
-      
-      <h3>Source</h3>
-      <div class="segmented-control">
-        <button id="s0" onclick="cmd('source',0)">1</button>
-        <button id="s1" onclick="cmd('source',1)">2</button>
-        <button id="s2" onclick="cmd('source',2)">3</button>
-        <button id="s3" onclick="cmd('source',3)">4</button>
-        <button id="s4" onclick="cmd('source',4)">Bypass</button>
-      </div>
-      
-      <h3>LED Brightness</h3>
-      <div class="segmented-control" id="brSeg" style="touch-action: none;">
-        <button id="b0" onclick="cmd('brightness',0)">Low</button>
-        <button id="b1" onclick="cmd('brightness',1)">Mid</button>
-        <button id="b2" onclick="cmd('brightness',2)">High</button>
-      </div>
-      </div>
-      
-      
-      <!-- IP, Temp, WiFi 移到系統設定上方，並置中顯示 -->
-      <div class="info-pill-bar">
-        <div class="info-pill">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink: 0; color: #fff;">
-            <path id="wf-arc3" d="M3.7 8.7a11.8 11.8 0 0 1 16.6 0" style="transition: opacity 0.3s; opacity: 0.2;" />
-            <path id="wf-arc2" d="M6.2 11.2a8.2 8.2 0 0 1 11.6 0" style="transition: opacity 0.3s; opacity: 0.2;" />
-            <path id="wf-arc1" d="M8.8 13.8a4.5 4.5 0 0 1 6.4 0" style="transition: opacity 0.3s; opacity: 0.2;" />
-            <circle id="wf-dot" cx="12" cy="17" r="1.5" fill="currentColor" stroke="none" style="transition: opacity 0.3s; opacity: 0.2;" />
-          </svg>
-          <span id="connSSID" class="val">--</span>
+        <h3>Volume</h3>
+        <div class="segmented-control" id="volGroup">
+          <button id="volDn" class="btn-vol" aria-label="降低音量，按住持續調整" disabled>−</button>
+          <button id="mute" aria-label="靜音" aria-pressed="false" disabled class="btn-mute" onclick="cmd('mute')">
+            <svg id="spk-icon" viewBox="0 0 24 24">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+            </svg>
+          </button>
+          <button id="volUp" class="btn-vol" aria-label="提高音量，按住持續調整" disabled>+</button>
         </div>
-        <div class="info-pill">
-          <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" style="flex-shrink: 0;">
-            <path d="M15 13V5c0-1.66-1.34-3-3-3S9 3.34 9 5v8c-1.21.91-2 2.37-2 4 0 2.76 2.24 5 5 5s5-2.24 5-5c0-1.63-.79-3.09-2-4zm-4-2V5c0-.55.45-1 1-1s1 .45 1 1v6h-2z"/>
-          </svg>
-          <span id="tempBox" class="val">-- °C</span>
+        
+        <h3>Source</h3>
+        <div class="segmented-control">
+          <button id="s0" disabled aria-pressed="false" onclick="cmd('source',0)">1</button>
+          <button id="s1" disabled aria-pressed="false" onclick="cmd('source',1)">2</button>
+          <button id="s2" disabled aria-pressed="false" onclick="cmd('source',2)">3</button>
+          <button id="s3" disabled aria-pressed="false" onclick="cmd('source',3)">4</button>
+          <button id="s4" disabled aria-pressed="false" onclick="cmd('source',4)">Bypass</button>
         </div>
-        <div class="info-pill">IP <span id="ipAddr" class="val">--</span></div>
+        
+        <h3>LED Brightness</h3>
+        <div class="segmented-control" id="brSeg" style="touch-action: none;">
+          <button id="b0" disabled aria-pressed="false" onclick="if(event.detail === 0) requestBrightness(0)">Low</button>
+          <button id="b1" disabled aria-pressed="false" onclick="if(event.detail === 0) requestBrightness(1)">Mid</button>
+          <button id="b2" disabled aria-pressed="false" onclick="if(event.detail === 0) requestBrightness(2)">High</button>
+        </div>
+      </div>
+      
+      <div class="bottom-bar">
+        <div class="info-pill-bar">
+          <div class="info-pill">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="flex-shrink: 0; color: #fff;">
+              <path id="wf-arc3" d="M3.7 8.7a11.8 11.8 0 0 1 16.6 0" style="transition: opacity 0.3s; opacity: 0.2;" />
+              <path id="wf-arc2" d="M6.2 11.2a8.2 8.2 0 0 1 11.6 0" style="transition: opacity 0.3s; opacity: 0.2;" />
+              <path id="wf-arc1" d="M8.8 13.8a4.5 4.5 0 0 1 6.4 0" style="transition: opacity 0.3s; opacity: 0.2;" />
+              <circle id="wf-dot" cx="12" cy="17" r="1.5" fill="currentColor" stroke="none" style="transition: opacity 0.3s; opacity: 0.2;" />
+            </svg>
+            <span id="connSSID" class="val">--</span>
+          </div>
+          <div class="info-pill">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="currentColor" style="flex-shrink: 0;">
+              <path d="M15 13V5c0-1.66-1.34-3-3-3S9 3.34 9 5v8c-1.21.91-2 2.37-2 4 0 2.76 2.24 5 5 5s5-2.24 5-5c0-1.63-.79-3.09-2-4zm-4-2V5c0-.55.45-1 1-1s1 .45 1 1v6h-2z"/>
+            </svg>
+            <span id="tempBox" class="val">-- °C</span>
+          </div>
+          <div class="info-pill">IP <span id="ipAddr" class="val">--</span></div>
+        </div>
       </div>
 
-      <button class="btn-glass setup-btn" onclick="changeView('fw')">系統設定 (Setup)</button>
+      <!-- 右下角獨立設定按鈕 (iOS HomeKit Style) -->
+      <div class="ios-settings-wrapper">
+        <button class="ios-settings-btn" aria-label="開啟設定" onclick="changeView('fw')" aria-label="系統設定">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+
     </div>
 
     <div id="view-fw" style="display: none;">
-      <div class="header" style="margin-bottom: 25px;">
-        <h2 style="color: #ffb74d;">System Setup</h2>
+      <div class="fw-header">
+        <button class="back-btn" aria-label="返回音響控制" onclick="changeView('main')">
+          <svg viewBox="0 0 24 24" width="22" height="22">
+            <line x1="19" y1="12" x2="5" y2="12" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"></line>
+            <polyline points="12 19 5 12 12 5" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          </svg>
+        </button>
+        <h2>System Setup</h2>
+        <div style="width: 38px;"></div> <!-- Spacer for centering -->
       </div>
 
-      <details>
-        <summary>System Info</summary>
+      <details class="settings-accordion">
+        <summary>
+          <div class="summary-content">
+            <span>System Info</span>
+            <div class="summary-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg></div>
+          </div>
+        </summary>
         <div class="setup-content">
-          <div style="font-size: 14px; line-height: 2.2; padding: 0px 4px;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="color: #fff;">Wi-Fi 類型</span>
-              <span id="wifiTypeBox" style="color: #8e8e93;">--</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="color: #fff;">MAC Address</span>
-              <span id="macBox" style="color: #8e8e93; font-family: monospace;">--</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="color: #fff;">BSSID</span>
-              <span id="bssidBox" style="color: #8e8e93; font-family: monospace;">--</span>
-            </div>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-              <span style="color: #fff;">RSSI</span>
-              <span id="rssiBox" style="color: #8e8e93;">-- dBm</span>
-            </div>
+          <div class="info-row">
+            <span class="info-label">Wi-Fi 類型</span>
+            <span id="wifiTypeBox" class="info-val no-mono">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">MAC Address</span>
+            <span id="macBox" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">BSSID</span>
+            <span id="bssidBox" class="info-val">--</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">RSSI</span>
+            <span id="rssiBox" class="info-val no-mono">-- dBm</span>
           </div>
         </div>
       </details>
 
-      <details open>
-        <summary>Wi-Fi Network</summary>
+      <details class="settings-accordion" open>
+        <summary>
+          <div class="summary-content">
+            <span>Wi-Fi Network</span>
+            <div class="summary-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg></div>
+          </div>
+        </summary>
         <div class="setup-content">
-          <button id="btnScan" class="btn-glass" style="background:rgba(255,255,255,0.05); box-shadow:inset 0 1px 1px rgba(255,255,255,0.1), 0 4px 10px rgba(0,0,0,0.3); margin-bottom: 12px;" onclick="scanWiFi()">掃描附近 Wi-Fi</button>
+          <button id="btnScan" class="btn-glass btn-secondary" style="margin-bottom: 16px;" onclick="scanWiFi()">掃描附近 Wi-Fi</button>
           <div id="wifi_list_box" class="wifi-list-container"></div>
           
           <div class="input-wrapper">
             <div class="field-icon"><svg viewBox="0 0 24 24"><path d="M12 3c-4.2 0-8 1.7-10.9 4.4L12 19.8l10.9-12.4C20 4.7 16.2 3 12 3z"/></svg></div>
-            <input type="text" id="ss" placeholder="Network Name">
+            <input type="text" id="ss" aria-label="Wi-Fi 名稱" autocapitalize="none" spellcheck="false" placeholder="Network Name">
           </div>
 
           <div class="input-wrapper">
             <div class="field-icon"><svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg></div>
-            <input type="password" id="ps" placeholder="Password">
-            <div class="toggle-password" onclick="togglePs()">
+            <input type="password" id="ps" aria-label="Wi-Fi 密碼" placeholder="原網路留空保留密碼">
+            <button type="button" class="toggle-password" aria-label="顯示或隱藏密碼" onclick="togglePs()">
               <svg id="eye-open" style="display:block;" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
               <svg id="eye-close" style="display:none;" viewBox="0 0 24 24"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.82l2.92 2.92c1.51-1.39 2.7-3.14 3.44-5.12-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>
+            </button>
+          </div>
+          <p id="wifiFeedback" class="form-status" role="status"></p>
+          <button id="saveWifiBtn" class="btn-glass btn-primary" style="margin-top: 10px; margin-bottom: 0;" onclick="saveWifi()">儲存 Wi-Fi</button>
+        </div>
+      </details>
+
+      <details class="settings-accordion">
+        <summary>
+          <div class="summary-content">
+            <span>MQTT Connection</span>
+            <div style="display:flex; align-items:center; gap: 8px;">
+              <span id="mqttStatus" class="settings-val">--</span>
+              <div class="summary-arrow"><svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg></div>
             </div>
           </div>
-          
-          <button class="btn-glass btn-blue" style="margin-top: 10px; margin-bottom: 0;" onclick="saveWifi()">儲存 Wi-Fi</button>
-        </div>
-      </details>
-
-      <details>
-        <summary>MQTT Connection <span id="mqttStatus" style="margin-left: auto; margin-right: 8px; font-size: 12px;">--</span></summary>
+        </summary>
         <div class="setup-content">
           <div class="setting-label">伺服器 IP (Broker IP)</div>
-          <div class="input-wrapper"><input type="text" id="mq_ip" placeholder="例如: 192.168.1.10"></div>
+          <div class="input-wrapper"><input type="text" id="mq_ip" aria-label="MQTT 伺服器" placeholder="例如: 192.168.1.10"></div>
           
           <div class="setting-label">連接埠 (Port)</div>
-          <div class="input-wrapper"><input type="number" id="mq_port" placeholder="預設: 1883"></div>
+          <div class="input-wrapper"><input type="number" id="mq_port" aria-label="MQTT 連接埠" placeholder="預設: 1883"></div>
           
           <div class="setting-label">使用者名稱 (Username)</div>
-          <div class="input-wrapper"><input type="text" id="mq_user" placeholder="若無則留空"></div>
+          <div class="input-wrapper"><input type="text" id="mq_user" aria-label="MQTT 使用者名稱" placeholder="若無則留空"></div>
           
           <div class="setting-label">密碼 (Password)</div>
-          <div class="input-wrapper"><input type="password" id="mq_pw" placeholder="若無則留空"></div>
+          <div class="input-wrapper"><input type="password" id="mq_pw" aria-label="MQTT 密碼" placeholder="若無則留空"></div>
           
-          <button class="btn-glass btn-cyan" onclick="saveMqtt()">儲存 MQTT</button>
+          <button class="btn-glass btn-primary" style="margin-top: 10px; margin-bottom: 0;" id="saveMqttBtn" onclick="saveMqtt()">儲存 MQTT</button>
         </div>
       </details>
 
-      <details>
-        <summary>Firmware Update <span id="fwDate" style="margin-left: auto; margin-right: 8px; font-size: 12px; color: #888;">--</span></summary>
-        <div class="setup-content">
-          <a class="btn-glass btn-red" href="/ota">GitHub 更新／手動上傳</a>
-          <p class="note">登入更新頁後可檢查版本。只有按下安裝才會更新。</p>
-        </div>
-      </details>
-      
-      <div style="margin-top: 20px;">
-        <button class="btn-glass" style="background:rgba(255,255,255,0.05); box-shadow:inset 0 1px 1px rgba(255,255,255,0.1), 0 4px 10px rgba(0,0,0,0.3);" onclick="changeView('main')">返回主面板</button>
-        <button class="btn-glass" style="background:linear-gradient(180deg, rgba(200,50,50,0.2) 0%, rgba(200,50,50,0.05) 100%); box-shadow:inset 0 1px 1px rgba(255,100,100,0.2), 0 4px 10px rgba(0,0,0,0.3);" onclick="rebootDevice()">重新啟動 (Reboot)</button>
+      <p id="settingsFeedback" class="form-status" role="status"></p>
+      <div class="settings-list">
+        <a class="settings-item" href="/ota">
+          <div class="settings-item-col">
+            <span class="settings-title">韌體更新 (OTA)</span>
+            <span class="settings-val" id="fwDate">Version: --</span>
+          </div>
+          <div class="settings-chevron">
+            <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
+          </div>
+        </a>
+        
+        <button id="rebootBtn" class="settings-item" onclick="rebootDevice()" style="justify-content: center;">
+          <span class="settings-title" style="color: #ff453a;">重新啟動 (Reboot)</span>
+        </button>
       </div>
+
     </div>
   </div>
 
   <script>
-    let isInteracting = false; 
-    let interactionTimeout = null;
-    let ws;
+    let ws, reconnectTimer;
+    let controlConnected = false, latestState = null, heldVolume = null;
+    let pendingBrightness = null, brightnessTimer = null, settingsBusy = false;
+    let scanBusy = false, selectedOpenNetwork = false;
+    const el = id => document.getElementById(id);
+    function feedback(message, wifi=false) { el(wifi ? 'wifiFeedback' : 'settingsFeedback').textContent = message; }
+    function updateControlAvailability() {
+      el('pwr').disabled = !controlConnected;
+      const disabled = !controlConnected || !latestState || !latestState.power || latestState.waiting;
+      document.querySelectorAll('.main-controls button').forEach(b => b.disabled = disabled);
+    }
+    function clearMotorUI() {
+      el('volDn').classList.remove('active'); el('volUp').classList.remove('active');
+      el('mute').classList.remove('motor-running'); el('st').classList.remove('motor-mode');
+    }
+    function showDisconnected() {
+      controlConnected = false; heldVolume = null; isDraggingBr = false;
+      pendingBrightness = null; clearTimeout(brightnessTimer);
+      clearMotorUI(); updateControlAvailability();
+      el('st').textContent = '連線中斷，重新連線中…';
+      el('st').style.color = '#ffb74d'; el('st').style.setProperty('--status-dot-color','#ffb74d');
+    }
+    function stopVolume() {
+      if (heldVolume !== null) cmd('motor_stop');
+      heldVolume = null; clearMotorUI();
+    }
+    function startVolume(direction, pointerId) {
+      if (heldVolume !== null || !controlConnected || !latestState?.power || latestState.waiting) return false;
+      if (!cmd(direction)) return false;
+      heldVolume = pointerId; return true;
+    }
+    async function fetchTimed(url, options={}, timeout=8000) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeout);
+      try {
+        const response = await fetch(url, {...options, signal:controller.signal, cache:'no-store'});
+        const text = await response.text();
+        return {ok:response.ok, status:response.status, text};
+      } finally { clearTimeout(timer); }
+    }
 
     function changeView(view) {
+      stopVolume();
       document.getElementById('view-main').style.display = (view === 'main') ? 'block' : 'none';
       document.getElementById('view-fw').style.display = (view === 'fw') ? 'block' : 'none';
       window.scrollTo(0, 0);
     }
 
     function initWS() {
-      ws = new WebSocket('ws://' + window.location.hostname + ':81/');
-      ws.onmessage = (e) => {
-        try { let d = JSON.parse(e.data); upd(d); } catch(err) {}
+      clearTimeout(reconnectTimer);
+      const socket = new WebSocket('ws://' + window.location.hostname + ':81/');
+      ws = socket;
+      socket.onmessage = e => {
+        if (ws !== socket) return;
+        try {
+          const d = JSON.parse(e.data);
+          if (typeof d.power !== 'boolean' || typeof d.motor !== 'number') return;
+          controlConnected = true; latestState = d; upd(d); updateControlAvailability();
+        } catch(err) { console.warn('Invalid device status',err); }
       };
-      ws.onclose = () => { setTimeout(initWS, 2000); }; 
+      socket.onerror = () => socket.close();
+      socket.onclose = () => {
+        if (ws !== socket) return;
+        showDisconnected(); reconnectTimer = setTimeout(initWS,2000);
+      };
     }
 
     function togglePs() {
@@ -668,52 +743,64 @@ const char index_html[] PROGMEM = R"rawliteral(
         document.getElementById('mq_port').value = d.mq_port;
         document.getElementById('mq_user').value = d.mq_user;
         if(d.is_ap) { changeView('fw'); setTimeout(() => { scanWiFi(); }, 600); }
-      }).catch(e=>console.log("Config load failed"));
+      }).catch(e=>feedback("無法讀取設定，請重新整理頁面後再儲存。"));
     };
 
-    function cmd(a, v=0){ 
-      isInteracting = true; clearTimeout(interactionTimeout);
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send((a === 'source' || a === 'brightness') ? a + ':' + v : a);
+    function cmd(a, v=0){
+      if (!ws || ws.readyState !== WebSocket.OPEN || (a !== 'motor_stop' && !controlConnected)) {
+        showDisconnected(); return false;
       }
-      interactionTimeout = setTimeout(() => { isInteracting = false; }, 1500);
+      ws.send((a === 'source' || a === 'brightness') ? a + ':' + v : a);
+      return true;
     }
 
     async function scanWiFiResults() {
-      let url = '/scan?start=1';
-      for (let i=0; i<30; i++) {
-        const r = await fetch(url, {cache:'no-store'});
-        if (r.status === 202) {
-          await new Promise(resolve => setTimeout(resolve, 700));
-          url = '/scan';
-          continue;
+      let url='/scan?start=1', lastError='掃描逾時，請重試';
+      const deadline=Date.now()+30000;
+      while(Date.now()<deadline) {
+        try {
+          const r=await fetchTimed(url,{},5000);
+          url='/scan';
+          if(r.status===202) { await new Promise(resolve=>setTimeout(resolve,700)); continue; }
+          let data; try { data=JSON.parse(r.text); } catch { throw Error('連線已切換，請確認仍連著音響熱點'); }
+          if(!r.ok) {
+            const error=Error(data.error || '掃描失敗，HTTP '+r.status); error.final=true; throw error;
+          }
+          if(!Array.isArray(data)) throw Error('掃描回應格式不正確');
+          return data;
+        } catch(error) {
+          if(error.final) throw error;
+          // A lost start response must not restart an already-running scan.
+          url='/scan'; lastError=error.name==='AbortError'?'連線逾時，請確認仍連著音響熱點':error.message;
+          await new Promise(resolve=>setTimeout(resolve,700));
         }
-        if (!r.ok) throw new Error('Wi-Fi scan failed');
-        return await r.json();
       }
-      throw new Error('Wi-Fi scan timed out');
+      throw Error(lastError);
     }
 
     function scanWiFi() {
-      isInteracting = true; clearTimeout(interactionTimeout);
+      if (scanBusy) return;
+      scanBusy = true;
       const btn = document.getElementById('btnScan');
       const listBox = document.getElementById('wifi_list_box');
-      btn.innerText = "Scanning (3~5s)..."; btn.disabled = true;
+      btn.innerText = "正在掃描附近 Wi-Fi…"; btn.disabled = true;
+      feedback("掃描中，請保持連著音響熱點。",true);
       
       scanWiFiResults().then(d => {
           listBox.innerHTML = ''; d.sort((a, b) => b.rssi - a.rssi);
           d.forEach(w => {
             if (!w.ssid) return; 
-            const item = document.createElement('div');
+            const item = document.createElement('button'); item.type = 'button';
             item.className = 'wifi-item';
             item.onclick = () => {
               document.getElementById('ss').value = w.ssid;
+              selectedOpenNetwork = w.enc === 'OPEN';
+              el('ps').value = '';
+              feedback(selectedOpenNetwork ? '已選擇開放網路，不需要密碼。' : '已選擇 '+w.ssid+'，新網路請輸入密碼。',true);
               if (w.enc !== "OPEN") document.getElementById('ps').focus();
             };
             
             let sigColor = w.rssi >= -73 ? "#03dac6" : (w.rssi >= -80 ? "#ffb74d" : "#cf6679"); 
-            
-            // 單色灰階鎖頭 SVG 圖示
             const lockSvg = (w.enc === "OPEN") ? '' : `
               <svg viewBox="0 0 24 24" width="13" height="13" fill="#888" style="flex-shrink:0;">
                 <path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/>
@@ -736,55 +823,51 @@ const char index_html[] PROGMEM = R"rawliteral(
           });
           listBox.style.display = 'block'; 
           btn.innerText = "重新掃描"; btn.disabled = false;
-          interactionTimeout = setTimeout(() => { isInteracting = false; }, 1500);
+          feedback(d.some(w=>w.ssid) ? "點選網路名稱，再儲存 Wi-Fi。" : "找不到附近網路，請確認基地台已開啟 2.4 GHz，或手動輸入名稱。",true);
+          scanBusy = false;
         }).catch(err => {
-          btn.innerText = "Scan Failed, Retry"; btn.disabled = false;
-          interactionTimeout = setTimeout(() => { isInteracting = false; }, 1500);
+          btn.innerText = "重試掃描"; btn.disabled = false;
+          feedback(err.message,true);
+          scanBusy = false;
         });
     }
     
     async function postSettings(path, values) {
-      const response = await fetch(path, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: new URLSearchParams(values).toString()
-      });
-      const message = await response.text();
-      if (!response.ok || message.trim() !== 'OK') {
-        throw new Error(message || `HTTP ${response.status}`);
-      }
+      const response=await fetchTimed(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},body:new URLSearchParams(values).toString()});
+      if(!response.ok || response.text.trim()!=='OK') throw Error(response.text || 'HTTP '+response.status);
     }
-
-    async function saveWifi() {
+    async function settingsAction(buttonId, action) {
+      if(settingsBusy) return;
+      settingsBusy=true;
+      const button=el(buttonId), title=button.textContent;
+      ['saveWifiBtn','saveMqttBtn','rebootBtn'].forEach(id=>el(id).disabled=true);
+      button.textContent='處理中…'; feedback('正在儲存或重新啟動…');
       try {
-        await postSettings('/savewifi', {
-          ssid: document.getElementById('ss').value,
-          pass: document.getElementById('ps').value
-        });
-        alert('Wi-Fi 儲存成功，設備即將重啟...');
-      } catch (err) {
-        alert('Wi-Fi 儲存失敗：' + err.message);
+        await action(); stopVolume();
+        feedback('裝置正在重新啟動。若已更換 Wi-Fi，請讓手機連上同一網路，再開啟裝置的新位址。');
+        button.textContent='等待重新連線…';
+        setTimeout(()=>{ settingsBusy=false; button.textContent=title; ['saveWifiBtn','saveMqttBtn','rebootBtn'].forEach(id=>el(id).disabled=false); },10000);
+      } catch(error) {
+        feedback(error.name==='AbortError' ? '回應逾時，儲存結果尚未確認；請確認連線與裝置狀態。' : '操作失敗：'+error.message);
+        settingsBusy=false; button.textContent=title;
+        ['saveWifiBtn','saveMqttBtn','rebootBtn'].forEach(id=>el(id).disabled=false);
       }
     }
-
-    async function saveMqtt() {
-      try {
-        await postSettings('/savemqtt', {
-          ip: document.getElementById('mq_ip').value,
-          port: document.getElementById('mq_port').value,
-          user: document.getElementById('mq_user').value,
-          pass: document.getElementById('mq_pw').value
-        });
-        alert('MQTT 儲存成功，設備即將重啟...');
-      } catch (err) {
-        alert('MQTT 儲存失敗：' + err.message);
-      }
+    function saveWifi() {
+      if(!el('ss').value.length) { feedback('請輸入 Wi-Fi 名稱。',true); return; }
+      return settingsAction('saveWifiBtn',()=>postSettings('/savewifi',{ssid:el('ss').value,pass:el('ps').value,open:selectedOpenNetwork?'1':'0'}));
     }
-
+    function saveMqtt() {
+      const port=Number(el('mq_port').value || 1883);
+      if(!Number.isInteger(port)||port<1||port>65535) { feedback('MQTT 連接埠必須介於 1–65535。'); return; }
+      return settingsAction('saveMqttBtn',()=>postSettings('/savemqtt',{ip:el('mq_ip').value,port,user:el('mq_user').value,pass:el('mq_pw').value}));
+    }
     function rebootDevice() {
-      if (confirm('重新啟動 Linear Acoustic 嗎？')) {
-        fetch('/reboot').then(() => { setTimeout(() => { location.reload(); }, 5000); });
-      }
+      if(!confirm('重新啟動 Linear Acoustic 嗎？')) return;
+      return settingsAction('rebootBtn',async()=>{
+        const response=await fetchTimed('/reboot');
+        if(!response.ok || response.text.trim()!=='OK') throw Error(response.text || 'HTTP '+response.status);
+      });
     }
 
     function upd(d){
@@ -799,6 +882,7 @@ const char index_html[] PROGMEM = R"rawliteral(
       let spkIcon = document.getElementById('spk-icon');
 
       if (d.waiting) {
+        clearMotorUI();
         pwrText.innerText = "Waiting..."; pwrText.style.color = "#ffb74d";
         pwrText.style.setProperty('--status-dot-color', '#ffb74d');
         document.getElementById('pwr').className = "btn-pwr off";
@@ -809,7 +893,7 @@ const char index_html[] PROGMEM = R"rawliteral(
           pwrText.style.setProperty('--status-dot-color', '#03dac6'); 
           if (volUp) volUp.classList.add('active');
           if (volDn) volDn.classList.remove('active');
-          if (muteBtn) muteBtn.classList.add('motor-running'); // 觸發馬達呼吸燈
+          if (muteBtn) muteBtn.classList.add('motor-running'); 
           window.volUiActive = true; 
         } 
         else if (d.motor === -1) {
@@ -818,14 +902,14 @@ const char index_html[] PROGMEM = R"rawliteral(
           pwrText.style.setProperty('--status-dot-color', '#03dac6'); 
           if (volDn) volDn.classList.add('active');
           if (volUp) volUp.classList.remove('active');
-          if (muteBtn) muteBtn.classList.add('motor-running'); // 觸發馬達呼吸燈
+          if (muteBtn) muteBtn.classList.add('motor-running'); 
           window.volUiActive = true; 
         }
         else {
           statusEl.classList.remove('motor-mode');
           if (volDn) volDn.classList.remove('active');
           if (volUp) volUp.classList.remove('active');
-          if (muteBtn) muteBtn.classList.remove('motor-running'); // 停止呼吸燈
+          if (muteBtn) muteBtn.classList.remove('motor-running'); 
           pwrText.innerText = d.power ? "ON" : "Standby";
           pwrText.style.color = d.power ? "#03dac6" : "#cf6679";
           pwrText.style.setProperty('--status-dot-color', d.power ? '#03dac6' : '#cf6679');
@@ -833,27 +917,31 @@ const char index_html[] PROGMEM = R"rawliteral(
         document.getElementById('pwr').className = d.power ? "btn-pwr" : "btn-pwr off";
       }
       
-      // Mute狀態及SVG圖標切換
       if (muteBtn) {
         muteBtn.classList.toggle('active', d.mute);
-        muteBtn.classList.toggle('motor-running', d.motor !== 0);
+        muteBtn.classList.toggle('motor-running', d.power && !d.waiting && d.motor !== 0);
+        muteBtn.setAttribute('aria-pressed',String(d.mute));
       }
       if (spkIcon) {
         if (d.mute) {
-          // 靜音劃線圖標
           spkIcon.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/>';
         } else {
-          // 正常音量圖標
           spkIcon.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>';
         }
       }
       
       for(let i=0;i<5;i++) document.getElementById('s'+i).className = (d.source==i && d.power && !d.waiting) ? "active" : "";
-      for(let i=0;i<3;i++) document.getElementById('b'+i).className = (d.br==i && d.power && !d.waiting) ? "active" : "";
+      for(let i=0;i<5;i++) el('s'+i).setAttribute('aria-pressed',String(d.source==i && d.power && !d.waiting));
+      el('pwr').setAttribute('aria-pressed',String(d.power));
+      if(!d.power || d.waiting) { pendingBrightness=null; isDraggingBr=false; }
+      if(pendingBrightness===d.br && !isDraggingBr) pendingBrightness=null;
+      const shownBrightness=pendingBrightness===null?d.br:pendingBrightness;
+      renderBrightness(shownBrightness,d.power && !d.waiting);
       
       document.getElementById('ipAddr').innerText = d.ip || "--";
       document.getElementById('tempBox').innerText = d.temp ? d.temp + " °C" : "--";
       document.getElementById('connSSID').innerText = d.ssid || "--";
+      
       let r = d.rssi || 0;
       let isConn = !!d.ssid && d.ssid !== "--" && r !== 0;
       let wDot = document.getElementById('wf-dot');
@@ -862,32 +950,42 @@ const char index_html[] PROGMEM = R"rawliteral(
       let wArc3 = document.getElementById('wf-arc3');
       if (wDot && wArc1 && wArc2 && wArc3) {
         if (!isConn) {
-          wDot.style.opacity = '0.2';
-          wArc1.style.opacity = '0.2';
-          wArc2.style.opacity = '0.2';
-          wArc3.style.opacity = '0.2';
+          wDot.style.opacity = '0.2'; wArc1.style.opacity = '0.2'; wArc2.style.opacity = '0.2'; wArc3.style.opacity = '0.2';
         } else {
           wDot.style.opacity = '1';
-          wArc1.style.opacity = (r >= -85) ? '1' : '0.2'; // >= -85 dBm 亮 2 格
-          wArc2.style.opacity = (r >= -75) ? '1' : '0.2'; // >= -75 dBm 亮 3 格
-          wArc3.style.opacity = (r >= -65) ? '1' : '0.2'; // >= -65 dBm 滿格 (4格)
+          wArc1.style.opacity = (r >= -85) ? '1' : '0.2'; 
+          wArc2.style.opacity = (r >= -75) ? '1' : '0.2'; 
+          wArc3.style.opacity = (r >= -65) ? '1' : '0.2'; 
         }
       }
+      
       if (d.wf_type) document.getElementById('wifiTypeBox').innerText = d.wf_type;
       if (d.mac) document.getElementById('macBox').innerText = d.mac;
       document.getElementById('bssidBox').innerText = d.bssid || "--";
       document.getElementById('rssiBox').innerText = (d.rssi !== 0 && d.rssi) ? d.rssi + " dBm" : "--";
       
       let mqStatus = document.getElementById('mqttStatus');
-      mqStatus.innerText = d.mqtt ? "(Connected)" : "(Disconnected)";
-      mqStatus.style.color = d.mqtt ? "#03dac6" : "#cf6679";
-      if (d.fw_date) document.getElementById('fwDate').innerText = d.fw_date;
+      mqStatus.innerText = d.mqtt ? "Connected" : "Disconnected";
+      mqStatus.style.color = d.mqtt ? "#03dac6" : "#888";
+
+      if (d.fw_date) document.getElementById('fwDate').innerText = "Ver. " + d.fw_date;
     }
 
-    // --- LED Brightness 滑動拖曳支援 ---
     const brSeg = document.getElementById('brSeg');
     let isDraggingBr = false;
     let lastBrIdx = -1;
+    function renderBrightness(idx, enabled=true) {
+      for(let i=0;i<3;i++) { el('b'+i).classList.toggle('active',enabled && i===idx); el('b'+i).setAttribute('aria-pressed',String(enabled && i===idx)); }
+    }
+    function requestBrightness(idx) {
+      if(!controlConnected || !latestState?.power || latestState.waiting || !cmd('brightness',idx)) return;
+      pendingBrightness=idx; renderBrightness(idx); clearTimeout(brightnessTimer);
+      brightnessTimer=setTimeout(()=>{ if(isDraggingBr) return; pendingBrightness=null; if(latestState) renderBrightness(latestState.br,latestState.power && !latestState.waiting); },1500);
+    }
+    function endBrightness() {
+      isDraggingBr=false; clearTimeout(brightnessTimer);
+      brightnessTimer=setTimeout(()=>{pendingBrightness=null; if(latestState) renderBrightness(latestState.br,latestState.power && !latestState.waiting);},1500);
+    }
 
     function handleBrSlide(e) {
       if (!brSeg) return;
@@ -898,37 +996,44 @@ const char index_html[] PROGMEM = R"rawliteral(
 
       if (idx !== lastBrIdx) {
         lastBrIdx = idx;
-        cmd('brightness', idx);
-        for (let i = 0; i < 3; i++) {
-          const btn = document.getElementById('b' + i);
-          if (btn) btn.className = (i === idx) ? "active" : "";
-        }
+        requestBrightness(idx);
       }
     }
 
     if (brSeg) {
       brSeg.addEventListener('pointerdown', (e) => {
-        isDraggingBr = true;
-        brSeg.setPointerCapture(e.pointerId);
-        lastBrIdx = -1;
-        handleBrSlide(e);
+        if(!e.isPrimary || e.button !== 0 || !controlConnected || !latestState?.power || latestState.waiting) return;
+        isDraggingBr = true; brSeg.setPointerCapture(e.pointerId); lastBrIdx = -1; handleBrSlide(e);
       });
-
-      brSeg.addEventListener('pointermove', (e) => {
-        if (isDraggingBr) handleBrSlide(e);
-      });
-
+      brSeg.addEventListener('pointermove', (e) => { if (isDraggingBr) handleBrSlide(e); });
       brSeg.addEventListener('pointerup', (e) => {
-        if (isDraggingBr) {
-          isDraggingBr = false;
-          brSeg.releasePointerCapture(e.pointerId);
-        }
+        if (isDraggingBr) { endBrightness(); if(brSeg.hasPointerCapture(e.pointerId)) brSeg.releasePointerCapture(e.pointerId); }
       });
-
-      brSeg.addEventListener('pointercancel', () => {
-        isDraggingBr = false;
-      });
+      brSeg.addEventListener('pointercancel', endBrightness);
+      brSeg.addEventListener('lostpointercapture', () => { if(isDraggingBr) endBrightness(); });
     }
+    for(const [id, direction] of [['volDn','vol_dn_start'],['volUp','vol_up_start']]) {
+      const button=el(id);
+      button.addEventListener('pointerdown',e=>{
+        if(!e.isPrimary || e.button!==0) return;
+        e.preventDefault();
+        if(startVolume(direction,e.pointerId)) button.setPointerCapture(e.pointerId);
+      });
+      for(const event of ['pointerup','pointercancel','lostpointercapture']) button.addEventListener(event,e=>{if(heldVolume===e.pointerId) stopVolume();});
+      button.addEventListener('pointermove',e=>{
+        if(heldVolume!==e.pointerId) return;
+        const r=button.getBoundingClientRect();
+        if(e.clientX<r.left || e.clientX>r.right || e.clientY<r.top || e.clientY>r.bottom) stopVolume();
+      });
+      button.addEventListener('keydown',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();if(!e.repeat)startVolume(direction,'keyboard');}});
+      button.addEventListener('keyup',e=>{if(e.key===' '||e.key==='Enter'){e.preventDefault();if(heldVolume==='keyboard')stopVolume();}});
+      button.addEventListener('blur',stopVolume);
+    }
+    window.addEventListener('blur',()=>{stopVolume();if(isDraggingBr)endBrightness();});
+    window.addEventListener('pagehide',stopVolume);
+    document.addEventListener('visibilitychange',()=>{if(document.hidden){stopVolume();if(isDraggingBr)endBrightness();}});
+    el('ss').addEventListener('input',()=>{selectedOpenNetwork=false;});
+    updateControlAvailability();
   </script>
 </body>
 </html>
@@ -1289,16 +1394,14 @@ void handleSaveWiFi() {
   String reqSsid = server.arg("ssid");
   String reqPass = server.arg("pass");
   
-  if (reqSsid.length() > 0) {
-    prefWifi.putString("ssid", reqSsid);
-    if (reqPass.length() > 0) {
-      prefWifi.putString("pass", reqPass);
-      Serial.println(">>> 偵測到新密碼，已更新 Wi-Fi 密碼。");
-    } else {
-      Serial.println(">>> 密碼欄位留空，維持原快閃記憶體中的 Wi-Fi 密碼不變。");
-    }
+  if (reqSsid.length() == 0 || reqSsid.length() > 32) {
+    server.send(400,"text/plain; charset=utf-8","Wi-Fi 名稱必須為 1–32 bytes"); return;
   }
-  
+  bool sameNetwork = reqSsid == prefWifi.getString("ssid", "");
+  bool openNetwork = server.arg("open") == "1";
+  prefWifi.putString("ssid",reqSsid);
+  if (openNetwork || reqPass.length() > 0 || !sameNetwork) prefWifi.putString("pass",openNetwork ? "" : reqPass);
+
   server.send(200, "text/plain", "OK");
   delay(1500); ESP.restart();
 }
@@ -1317,65 +1420,90 @@ void handleSaveMQTT() {
   delay(1500); ESP.restart();
 }
 
-void handleScanWiFi() {
+enum class ScanPhase : uint8_t { Idle, Preparing, Running, Ready, Failed };
+ScanPhase scanPhase = ScanPhase::Idle;
+unsigned long scanPhaseAt = 0, scanFinishedAt = 0;
+unsigned scanAttempts = 0;
+bool portalStaPaused = false;
+bool scanActive() { return scanPhase == ScanPhase::Preparing || scanPhase == ScanPhase::Running; }
+
+void beginWifiScan() {
+  WiFi.setAutoReconnect(false); // networkTask is the single reconnect owner.
+  if (WiFi.status() != WL_CONNECTED) WiFi.disconnect(false, false);
+  WiFi.scanDelete();
+  WiFi.setScanTimeout(15000);
+  scanPhase = ScanPhase::Preparing;
+  scanPhaseAt = millis(); scanAttempts = 0;
   refreshWebActivity();
-  if (AudioOTA::holdRequested.load()) {
-    server.send(409, "text/plain", "Firmware update in progress");
-    return;
-  }
-  int n = WiFi.scanComplete();
-  if (server.hasArg("start") && n != WIFI_SCAN_RUNNING) {
-    WiFi.scanDelete();
-    n = WiFi.scanNetworks(true, false, true, 300);
-  }
-  if (n == WIFI_SCAN_RUNNING) {
-    server.send(202, "application/json", "{\"scanning\":true}");
-    return;
-  }
-  if (n < 0) {
-    server.send(503, "application/json", "{\"error\":\"scan failed\"}");
-    return;
-  }
+}
 
-  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
-  server.send(200, "application/json", "[");
-
-  if (n > 0) {
-    for (int i = 0; i < n; ++i) {
-      String encType;
-      switch (WiFi.encryptionType(i)) {
-        case WIFI_AUTH_OPEN: encType = "OPEN"; break; 
-        case WIFI_AUTH_WEP: encType = "WEP"; break;
-        case WIFI_AUTH_WPA_PSK: encType = "WPA"; break;
-        case WIFI_AUTH_WPA2_PSK: encType = "WPA2"; break;
-        case WIFI_AUTH_WPA_WPA2_PSK: encType = "WPA/WPA2"; break;
-        case WIFI_AUTH_WPA3_PSK: encType = "WPA3"; break;
-        case WIFI_AUTH_WPA2_WPA3_PSK: encType = "WPA2/WPA3"; break;
-        default: encType = "WPAx"; break;
-      }
-
-      char buffer[512];
-      snprintf(buffer, sizeof(buffer), "%s{\"ssid\":\"%s\",\"rssi\":%d,\"ch\":%d,\"enc\":\"%s\"}",
-               (i == 0) ? "" : ",", 
-               jsonEscape(WiFi.SSID(i)).c_str(),
-               WiFi.RSSI(i),
-               WiFi.channel(i),
-               encType.c_str());
-      server.sendContent(buffer);
+void serviceWifiScan() {
+  if (scanPhase == ScanPhase::Preparing && millis() - scanPhaseAt >= 300) {
+    // Active scan, bounded per-channel dwell; keep the setup AP enabled.
+    int result = WiFi.scanNetworks(true, false, false, 120);
+    ++scanAttempts;
+    Serial.printf("[WiFi scan] start attempt=%u result=%d mode=%d status=%d\n",scanAttempts,result,(int)WiFi.getMode(),(int)WiFi.status());
+    scanPhaseAt = millis();
+    if (result == WIFI_SCAN_RUNNING) scanPhase = ScanPhase::Running;
+    else if (result >= 0) { scanPhase = ScanPhase::Ready; scanFinishedAt = millis(); }
+    else if (scanAttempts >= 3) scanPhase = ScanPhase::Failed;
+    else if (WiFi.status() != WL_CONNECTED) WiFi.disconnect(false, false);
+  } else if (scanPhase == ScanPhase::Running) {
+    int result = WiFi.scanComplete();
+    if (result >= 0) {
+      scanPhase = ScanPhase::Ready; scanFinishedAt = millis();
+      Serial.printf("[WiFi scan] complete networks=%d\n",result);
+    } else if (result != WIFI_SCAN_RUNNING || millis() - scanPhaseAt > 16000) {
+      esp_wifi_scan_stop(); WiFi.scanDelete(); scanPhase = ScanPhase::Failed;
+      Serial.printf("[WiFi scan] failed result=%d\n",result);
     }
   }
-  server.sendContent("]");
-  server.sendContent("");
-  WiFi.scanDelete();
+}
+
+void handleScanWiFi() {
+  refreshWebActivity();
+  server.sendHeader("Cache-Control", "no-store");
+  if (AudioOTA::busy.load()) {
+    server.send(409,"application/json; charset=utf-8","{\"error\":\"韌體更新忙碌，請稍後再掃描\"}"); return;
+  }
+  if (server.hasArg("start") && !scanActive() &&
+      !(scanPhase == ScanPhase::Ready && millis() - scanFinishedAt < 2000)) beginWifiScan();
+  // A lost initial request can be recovered by polling, without restarting scans.
+  if (scanPhase == ScanPhase::Idle) beginWifiScan();
+  if (scanActive()) { server.send(202,"application/json","{\"scanning\":true}"); return; }
+  const int n = WiFi.scanComplete();
+  if (scanPhase == ScanPhase::Failed || n < 0) {
+    server.send(503,"application/json; charset=utf-8","{\"error\":\"Wi-Fi 掃描未完成，請重試；若持續失敗請查看序列埠 [WiFi scan] 訊息\"}"); return;
+  }
+  JsonDocument doc; JsonArray rows = doc.to<JsonArray>();
+  for (int i=0; i<n; ++i) {
+    JsonObject row=rows.add<JsonObject>();
+    row["ssid"]=WiFi.SSID(i); row["rssi"]=WiFi.RSSI(i); row["ch"]=WiFi.channel(i);
+    switch(WiFi.encryptionType(i)) {
+      case WIFI_AUTH_OPEN: row["enc"]="OPEN"; break;
+      case WIFI_AUTH_WEP: row["enc"]="WEP"; break;
+      case WIFI_AUTH_WPA_PSK: row["enc"]="WPA"; break;
+      case WIFI_AUTH_WPA2_PSK: row["enc"]="WPA2"; break;
+      case WIFI_AUTH_WPA_WPA2_PSK: row["enc"]="WPA/WPA2"; break;
+      case WIFI_AUTH_WPA3_PSK: row["enc"]="WPA3"; break;
+      case WIFI_AUTH_WPA2_WPA3_PSK: row["enc"]="WPA2/WPA3"; break;
+      default: row["enc"]="WPAx"; break;
+    }
+  }
+  String json; serializeJson(doc,json); server.send(200,"application/json; charset=utf-8",json);
+  // Keep results until the next scan, so other tabs and retried polls can read them.
 }
 
 void startAPMode() {
   isConfigMode = true;
   String apName = "LinearAcoustic-" + deviceId.substring(3); 
-  WiFi.disconnect(true, true); 
+  WiFi.setAutoReconnect(false);
+  WiFi.disconnect(false, false);
+  portalStaPaused = true;
+  lastWifiReconnectAttempt = millis();
   delay(100);
   WiFi.mode(WIFI_AP_STA); 
-  esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+  esp_wifi_set_ps(WIFI_PS_NONE);
   WiFi.softAP(apName.c_str(), "12345678");   
   dnsServer.start(53, "*", WiFi.softAPIP());
 }
@@ -1503,7 +1631,11 @@ void networkTask(void *pvParameters) {
         }
       }
 
-      if (wifiShouldReconnect && allowReconnect && (millis() - lastWifiReconnectAttempt > reconnectInterval)) {
+      if (isConfigMode && WiFi.softAPgetStationNum() > 0 && !wifiConnected && !portalStaPaused) {
+        WiFi.disconnect(false, false); portalStaPaused = true;
+      }
+      serviceWifiScan();
+      if (wifiShouldReconnect && allowReconnect && !scanActive() && !AudioOTA::busy.load() && (millis() - lastWifiReconnectAttempt > reconnectInterval)) {
         lastWifiReconnectAttempt = millis();
         if (isConfigMode) {
           Serial.println(">>> [自動復原] 熱點目前無人使用，嘗試連回主要基地台");
@@ -1513,10 +1645,11 @@ void networkTask(void *pvParameters) {
         WiFi.setHostname(routerHostname.c_str());
         String s = prefWifi.getString("ssid", "");
         String p = prefWifi.getString("pass", "");
+        portalStaPaused = false;
         WiFi.begin(s.c_str(), p.c_str()); 
       }
 
-      if (isConfigMode && wifiConnected) {
+      if (isConfigMode && wifiConnected && WiFi.softAPgetStationNum() == 0 && !scanActive()) {
         Serial.println(">>> [網路復原成功] 已自動連回主要基地台！解除 AP Mode");
         WiFi.mode(WIFI_STA);
         dnsServer.stop();
@@ -1563,7 +1696,7 @@ void networkTask(void *pvParameters) {
       }
     }
 
-    if (isWebHighPerformance && (millis() - lastWebActivityTick > 20000)) {
+    if (isWebHighPerformance && !scanActive() && !(isConfigMode && WiFi.softAPgetStationNum() > 0) && (millis() - lastWebActivityTick > 20000)) {
       esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
       isWebHighPerformance = false;
       Serial.println(">>> 閒置超過 20 秒，射頻節能模式. ");
@@ -1579,6 +1712,7 @@ void networkTask(void *pvParameters) {
 void setup() {
   Serial.begin(115200);
   WiFi.mode(WIFI_STA);
+  WiFi.setAutoReconnect(false);
   
   String mac = WiFi.macAddress();
   WiFi.disconnect(true, false);
