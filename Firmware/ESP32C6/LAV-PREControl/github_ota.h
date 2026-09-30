@@ -6,7 +6,6 @@
 #include <NetworkClientSecure.h>
 #include <WebServer.h>
 #include <Update.h>
-#include <Preferences.h>
 #include <atomic>
 #include <time.h>
 #include <esp_ota_ops.h>
@@ -31,7 +30,6 @@ static QueueHandle_t jobs = nullptr;
 static TaskHandle_t workerHandle = nullptr;
 static bool servicesStarted = false;
 static char token[33];
-static char otaPassword[65] = {};
 struct Manifest {
   char version[24] = {};
   char url[320] = {};
@@ -66,40 +64,6 @@ static void progress(unsigned percent) {
   xSemaphoreTake(stateMutex, portMAX_DELAY);
   state.progress = percent;
   xSemaphoreGive(stateMutex);
-}
-static bool configured() { return AUDIO_OTA_USER[0] && otaPassword[0]; }
-static void initPassword() {
-  Preferences credentials;
-  if (!credentials.begin("ota_auth", false)) return;
-  String saved = credentials.getString("password", "");
-  if (saved.length() >= 16 && saved.length() < sizeof(otaPassword)) {
-    strlcpy(otaPassword, saved.c_str(), sizeof(otaPassword));
-  } else {
-    snprintf(otaPassword, sizeof(otaPassword), "%08lx%08lx%08lx%08lx",
-             (unsigned long)esp_random(), (unsigned long)esp_random(),
-             (unsigned long)esp_random(), (unsigned long)esp_random());
-    if (credentials.putString("password", otaPassword) != strlen(otaPassword)) otaPassword[0] = '\0';
-  }
-  credentials.end();
-  Serial.println("[OTA] USB serial command: OTA PASSWORD (115200 baud, newline).");
-}
-static void serialHelp() {
-  static char line[40];
-  static unsigned used = 0;
-  static bool overflow = false;
-  // Bound work per loop; do not affect physical control timing.
-  for (unsigned count=0; count<40 && Serial.available(); ++count) {
-    char c = Serial.read();
-    if (c == '\r' || c == '\n') {
-      line[used] = '\0';
-      if (!overflow && strcmp(line, "OTA PASSWORD") == 0) {
-        if (configured()) Serial.printf("[OTA] user: %s  password: %s\n", AUDIO_OTA_USER, otaPassword);
-        else Serial.println("[OTA] Credential storage failed; OTA disabled.");
-      }
-      used = 0; overflow = false;
-    } else if (used < sizeof(line)-1) line[used++] = c;
-    else overflow = true;
-  }
 }
 static void releaseAudio() {
   holdRequested.store(false);
@@ -302,17 +266,6 @@ static void worker(void *) {
   }
 }
 
-static bool auth(WebServer &server) {
-  if (!configured()) {
-    server.send(503, "text/plain; charset=utf-8", "OTA 密碼儲存失敗，更新功能已停用，請檢查序列埠訊息。");
-    return false;
-  }
-  if (!server.authenticate(AUDIO_OTA_USER, otaPassword)) {
-    server.requestAuthentication(DIGEST_AUTH, "Linear Acoustic OTA");
-    return false;
-  }
-  return true;
-}
 static bool csrf(WebServer &server) {
   if (!server.hasArg("token") || server.arg("token") != token) {
     server.send(403, "text/plain; charset=utf-8", "頁面已失效，請重新開啟更新頁面。"); return false;
@@ -350,7 +303,7 @@ static const char PAGE[] PROGMEM = R"OTAHTML(<!doctype html><html lang="zh-Hant"
 <p><a href="/">返回音響控制</a></p><script>
 const token='%%TOKEN%%'; let latest='', pending=false, active=false;
 const $=id=>document.getElementById(id);
-async function refresh(){try{const r=await fetch('/ota/status',{cache:'no-store'});if(!r.ok)throw Error('無法取得更新狀態，請重新登入');const s=await r.json();latest=s.latest;active=s.busy;$('current').textContent=s.current;$('latest').textContent=s.latest||'尚未取得可安裝版本';$('message').textContent=s.message;$('progress').value=s.progress;$('check').disabled=s.busy||pending;$('install').disabled=s.busy||pending||!s.available;$('upload').disabled=s.busy||pending;}catch(e){$('message').textContent='連線中斷或裝置正在重啟，稍後將重試';$('install').disabled=true;$('check').disabled=true;$('upload').disabled=true;}}
+async function refresh(){try{const r=await fetch('/ota/status',{cache:'no-store'});if(!r.ok)throw Error('無法取得更新狀態，請重新整理頁面');const s=await r.json();latest=s.latest;active=s.busy;$('current').textContent=s.current;$('latest').textContent=s.latest||'尚未取得可安裝版本';$('message').textContent=s.message;$('progress').value=s.progress;$('check').disabled=s.busy||pending;$('install').disabled=s.busy||pending||!s.available;$('upload').disabled=s.busy||pending;}catch(e){$('message').textContent='連線中斷或裝置正在重啟，稍後將重試';$('install').disabled=true;$('check').disabled=true;$('upload').disabled=true;}}
 async function command(path){if(pending||active)return;pending=true;$('check').disabled=true;$('install').disabled=true;try{const r=await fetch(path,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({token,version:latest})});const text=await r.text();if(!r.ok)throw Error(text);}catch(e){alert(e.message);}finally{pending=false;await refresh();}}
 $('check').onclick=()=>command('/ota/check');$('install').onclick=()=>{if(confirm('安裝 '+latest+'？音響將先進入待機，更新期間請勿斷電。'))command('/ota/install');};
 $('manual').onsubmit=e=>{if(active||pending||!confirm('上傳韌體並更新？音響將先進入待機。'))e.preventDefault();};
@@ -364,27 +317,23 @@ static void clearManual() {
   manualOwned = manualEnded = manualFailed = false;
 }
 static void begin(WebServer &server) {
-  initPassword();
   stateMutex = xSemaphoreCreateMutex();
   if (!stateMutex) { Serial.println("[OTA] mutex allocation failed"); return; }
   snprintf(token, sizeof(token), "%08lx%08lx%08lx%08lx", (unsigned long)esp_random(),
            (unsigned long)esp_random(), (unsigned long)esp_random(), (unsigned long)esp_random());
-  if (configured()) {
-    jobs = xQueueCreate(1, sizeof(Job));
-    if (!jobs || xTaskCreate(worker, "GitHubOTA", 12288, nullptr, 1, &workerHandle) != pdPASS)
-      report("error", "更新背景任務啟動失敗，請重啟裝置");
-  }
+  jobs = xQueueCreate(1, sizeof(Job));
+  if (!jobs || xTaskCreate(worker, "GitHubOTA", 12288, nullptr, 1, &workerHandle) != pdPASS)
+    report("error", "更新背景任務啟動失敗，請重啟裝置");
   server.on("/ota", HTTP_GET, [&server]() {
-    if (!auth(server)) return;
     String page = FPSTR(PAGE);
     page.replace("%%TOKEN%%", token);
     server.sendHeader("Cache-Control", "no-store");
     server.sendHeader("X-Frame-Options", "DENY");
     server.send(200, "text/html; charset=utf-8", page);
   });
-  server.on("/ota/status", HTTP_GET, [&server]() { if (auth(server)) sendState(server); });
+  server.on("/ota/status", HTTP_GET, [&server]() { sendState(server); });
   server.on("/ota/check", HTTP_POST, [&server]() {
-    if (!auth(server) || !csrf(server)) return;
+    if (!csrf(server)) return;
     if (!workerHandle) { server.send(503, "text/plain", "OTA worker unavailable"); return; }
     if (busy.exchange(true)) { server.send(409, "text/plain", "Update operation is busy"); return; }
     report("checking", "正在檢查 GitHub 版本資訊");
@@ -393,7 +342,7 @@ static void begin(WebServer &server) {
     server.send(202, "text/plain", "Checking");
   });
   server.on("/ota/install", HTTP_POST, [&server]() {
-    if (!auth(server) || !csrf(server)) return;
+    if (!csrf(server)) return;
     if (!workerHandle) { server.send(503, "text/plain", "OTA worker unavailable"); return; }
     if (busy.exchange(true)) { server.send(409, "text/plain", "Update operation is busy"); return; }
     State s = snapshot();
@@ -406,7 +355,7 @@ static void begin(WebServer &server) {
     server.send(202, "text/plain", "Installing");
   });
   server.on("/update", HTTP_POST, [&server]() {
-    if (!auth(server) || !csrf(server)) {
+    if (!csrf(server)) {
       if (manualOwned) { clearManual(); fail("手動上傳驗證失敗，已取消更新"); }
       return;
     }
@@ -423,8 +372,7 @@ static void begin(WebServer &server) {
     manualLastData = millis();
     if (u.status == UPLOAD_FILE_START) {
       if (manualOwned) { manualFailed = true; if (Update.isRunning()) Update.abort(); return; }
-      if (!configured() || !server.authenticate(AUDIO_OTA_USER, otaPassword) ||
-          !server.hasArg("token") || server.arg("token") != token) return;
+      if (!server.hasArg("token") || server.arg("token") != token) return;
       if (busy.exchange(true)) return;
       manualOwned = true; manualEnded = manualFailed = false;
       report("uploading", "進入待機並接收手動韌體");
@@ -439,9 +387,9 @@ static void begin(WebServer &server) {
   });
 }
 static void startArduinoOTA() {
-  if (servicesStarted || !configured() || !stateMutex) return;
+  if (servicesStarted || !stateMutex) return;
   servicesStarted = true;
-  ArduinoOTA.setPassword(otaPassword);
+  // No OTA password, as requested; access is limited by the local network.
   ArduinoOTA.setRebootOnSuccess(false);
   ArduinoOTA.onStart([]() {
     busy.store(true);

@@ -1658,7 +1658,6 @@ void setup() {
 // Loop (ESP32-C6: scheduled on the same application CPU as other tasks)
 // ==========================================
 void loop() {
-  AudioOTA::serialHelp();
   // Only this task changes audio hardware to enter OTA maintenance.
   if (AudioOTA::holdRequested.load()) {
     if (!AudioOTA::holdReady.load()) {
