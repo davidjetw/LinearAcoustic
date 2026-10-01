@@ -2,8 +2,8 @@
   "schema": 1,
   "product": "linear-acoustic-lav60ii",
   "board": "esp32c6",
-  "version": "26.09.30+4",
-  "url": "https://raw.githubusercontent.com/davidjetw/LinearAcoustic/main/OTA/ESP32C6/releases/26.09.30%2B4/LAV60II.bin",
-  "size": 1447632,
-  "sha256": "fb72d252f1d51103f9bc5c617c4d008d2fb64b783cb9d5ab90f5d099de3513b9"
+  "version": "26.10.02+1",
+  "url": "https://raw.githubusercontent.com/davidjetw/LinearAcoustic/main/OTA/ESP32C6/releases/26.10.02%2B1/LAV60II.bin",
+  "size": 1448016,
+  "sha256": "eb854db02e722b9bd43da4679d8415cea0cd78542122969a7649e4b1c82406e3"
 }
