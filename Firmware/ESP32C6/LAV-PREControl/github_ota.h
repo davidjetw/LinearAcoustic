@@ -10,6 +10,7 @@
 #include <time.h>
 #include <esp_ota_ops.h>
 #include <esp_system.h>
+#include <esp_wifi.h>
 #include <mbedtls/sha256.h>
 #include "ota_config.h"
 #include "ota_version.h"
@@ -145,7 +146,7 @@ static bool readManifest(Manifest &out, String &error) {
   if (!doc["schema"].is<int>() || doc["schema"].as<int>() != 1 ||
       !doc["size"].is<uint32_t>() || !doc["version"].is<const char *>() ||
       !doc["sha256"].is<const char *>() || !doc["url"].is<const char *>()) {
-    error = "GitHub 尚未發布具備完整校驗資訊的新韌體；舊測試檔不可安裝"; return false;
+    error = "尚未發布具備完整校驗資訊的新韌體"; return false;
   }
   if (strcmp(doc["board"] | "", AUDIO_OTA_BOARD) ||
       strcmp(doc["product"] | "", AUDIO_OTA_PRODUCT)) {
@@ -174,7 +175,32 @@ static bool readManifest(Manifest &out, String &error) {
   return true;
 }
 
+// Keep radio awake after holdAudio() has finished its standby sequence.
+// Restore the previous setting on every success/error return.
+struct DownloadRadio {
+  wifi_ps_type_t previous = WIFI_PS_MIN_MODEM;
+  bool enabled = false;
+  DownloadRadio() {
+    if (esp_wifi_get_ps(&previous) == ESP_OK)
+      enabled = esp_wifi_set_ps(WIFI_PS_NONE) == ESP_OK;
+  }
+  ~DownloadRadio() { if (enabled) esp_wifi_set_ps(previous); }
+};
+static void downloadStatus(uint32_t total, uint32_t size, uint32_t elapsed,
+                           const char *failure = nullptr) {
+  char message[180];
+  unsigned percent = (uint64_t)total * 99 / size;
+  snprintf(message, sizeof(message), "%s %lu/%lu KB (%u%%), %lu s, %lu KB/s",
+           failure ? failure : "下載與校驗中",
+           (unsigned long)(total / 1024), (unsigned long)((size + 1023) / 1024), percent,
+           (unsigned long)(elapsed / 1000),
+           (unsigned long)(elapsed ? ((uint64_t)total * 1000 / elapsed / 1024) : 0));
+  report(failure ? "error" : "downloading", message, percent);
+  Serial.printf("[OTA] %s\n", message);
+}
 static bool download(const Manifest &m, String &error) {
+  DownloadRadio radio;
+  if (!radio.enabled) { error = "無法設定更新期間的 Wi-Fi 模式"; return false; }
   if (!httpsReady(error)) return false;
   NetworkClientSecure client;
   secureClient(client);
@@ -190,6 +216,7 @@ static bool download(const Manifest &m, String &error) {
   mbedtls_sha256_init(&hash);
   bool ok = mbedtls_sha256_starts(&hash, 0) == 0;
   uint32_t total = 0, lastData = millis(), started = millis();
+  uint32_t lastReport = started, lastYield = started;
   uint8_t buffer[2048];
   auto *stream = http.getStreamPtr();
   while (ok && total < m.size) {
@@ -204,12 +231,22 @@ static bool download(const Manifest &m, String &error) {
       }
       total += n;
       lastData = millis();
-      progress((uint64_t)total * 99 / m.size);
-    } else if (!http.connected() || millis() - lastData > 15000) {
+      if (total == m.size || millis() - lastReport >= 1000) {
+        downloadStatus(total, m.size, millis() - started);
+        lastReport = millis();
+      }
+    } else if (!http.connected() || millis() - lastData > 30000) {
       error = "韌體下載中斷或逾時"; ok = false; break;
     }
-    if (millis() - started > 180000) { error = "韌體下載超過三分鐘"; ok = false; break; }
-    vTaskDelay(pdMS_TO_TICKS(1));
+    // Permit slow but progressing connections; still stop stalled transfers.
+    if (total < m.size && millis() - started > 600000) {
+      error = "韌體下載超過十分鐘"; ok = false; break;
+    }
+    // Drain buffered TLS data in short bursts, keeping other tasks responsive.
+    if (available <= 0 || millis() - lastYield >= 8) {
+      vTaskDelay(pdMS_TO_TICKS(1));
+      lastYield = millis();
+    }
   }
   unsigned char digest[32];
   char hex[65];
@@ -229,6 +266,10 @@ static bool download(const Manifest &m, String &error) {
     if (!ok) error = "韌體映像驗證失敗，請確認是 ESP32-C6 應用程式 bin";
   }
   if (!ok && Update.isRunning()) Update.abort();
+  if (!ok) {
+    downloadStatus(total, m.size, millis() - started, error.c_str());
+    error = snapshot().message;
+  }
   return ok;
 }
 
@@ -293,11 +334,11 @@ static void sendState(WebServer &server) {
 static const char PAGE[] PROGMEM = R"OTAHTML(<!doctype html><html lang="zh-Hant"><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>Linear Acoustic 更新</title>
 <style>body{font:16px system-ui;background:#121214;color:#eee;max-width:540px;margin:32px auto;padding:0 20px;line-height:1.7}button,a{font:inherit}button{padding:10px 16px;margin:8px 8px 8px 0;border:0;border-radius:12px;background:#03dac6;color:#111}button:disabled{opacity:.4}a{color:#03dac6}small{color:#aaa}progress{width:100%}input{margin:12px 0;max-width:100%}</style>
-<h2>韌體更新</h2><p>目前版本：<b id="current"></b><br>GitHub 最新版本：<b id="latest">尚未檢查</b></p>
+<h2>韌體更新</h2><p>目前版本：<b id="current"></b><br>線上最新版本：<b id="latest">尚未檢查</b></p>
 <p id="message" role="status">載入中…</p><progress id="progress" max="100" value="0"></progress>
 <button id="check">檢查更新</button><button id="install" disabled>安裝更新</button>
-<p><small>只有按下安裝才會更新。安裝前音響會自動進入待機；失敗時維持待機，成功後重新啟動。</small></p>
-<details><summary>手動上傳 .bin</summary><form id="manual" action="/update" method="post" enctype="multipart/form-data">
+<p><small>按下安裝才會更新。安裝前會自動進入待機；失敗時維持待機，成功後重新啟動。</small></p>
+<details><summary>手動上傳</summary><form id="manual" action="/update" method="post" enctype="multipart/form-data">
 <input name="token" type="hidden" value="%%TOKEN%%"><input id="file" type="file" name="update" accept=".bin" required>
 <button id="upload" type="submit">上傳並更新</button></form><small>請選擇本機型的應用程式 .bin，不要選 merged.bin、bootloader 或 partitions。</small></details>
 <p><a href="/">返回音響控制</a></p><script>

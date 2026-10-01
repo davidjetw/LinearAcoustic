@@ -223,6 +223,11 @@ const char index_html[] PROGMEM = R"rawliteral(
       background: linear-gradient(180deg, #e06c81 0%, #bd4e63 100%); color: white; 
       border-color: rgba(255,255,255,0.2); box-shadow: inset 0 2px 4px rgba(255,255,255,0.2); 
     }
+    .btn-pwr.waiting {
+      background: linear-gradient(180deg, #ffb74d 0%, #e69724 100%); color: #000;
+      border-color: rgba(255,255,255,0.4);
+      box-shadow: inset 0 2px 4px rgba(255,255,255,0.4), 0 4px 12px rgba(255,183,77,0.28);
+    }
     .btn-pwr:active { transform: scale(0.92); }
 
     .power-status-row {
@@ -885,7 +890,7 @@ const char index_html[] PROGMEM = R"rawliteral(
         clearMotorUI();
         pwrText.innerText = "Waiting..."; pwrText.style.color = "#ffb74d";
         pwrText.style.setProperty('--status-dot-color', '#ffb74d');
-        document.getElementById('pwr').className = "btn-pwr off";
+        document.getElementById('pwr').className = "btn-pwr waiting";
       } else {
         if (d.motor === 1) {
           statusEl.classList.add('motor-mode');
@@ -1573,7 +1578,7 @@ void onWiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
 
     case ARDUINO_EVENT_WIFI_AP_STADISCONNECTED:
       Serial.println(">>> [Event] 手機已離開熱點！恢復射頻省電");
-      esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
+      if (!AudioOTA::busy.load()) esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
       break;
 
     default:
@@ -1654,7 +1659,7 @@ void networkTask(void *pvParameters) {
         WiFi.mode(WIFI_STA);
         dnsServer.stop();
         isConfigMode = false;
-        esp_wifi_set_ps(WIFI_PS_MIN_MODEM); 
+        if (!AudioOTA::busy.load()) esp_wifi_set_ps(WIFI_PS_MIN_MODEM); 
       }
 
       if (isConfigMode) dnsServer.processNextRequest();
@@ -1696,7 +1701,7 @@ void networkTask(void *pvParameters) {
       }
     }
 
-    if (isWebHighPerformance && !scanActive() && !(isConfigMode && WiFi.softAPgetStationNum() > 0) && (millis() - lastWebActivityTick > 20000)) {
+    if (isWebHighPerformance && !AudioOTA::busy.load() && !scanActive() && !(isConfigMode && WiFi.softAPgetStationNum() > 0) && (millis() - lastWebActivityTick > 20000)) {
       esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
       isWebHighPerformance = false;
       Serial.println(">>> 閒置超過 20 秒，射頻節能模式. ");
